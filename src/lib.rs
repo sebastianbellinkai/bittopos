@@ -50,11 +50,25 @@ impl std::fmt::Display for StoreError {
             Self::Io(e) => write!(f, "error de E/S: {e}"),
             Self::TomlSerialize(e) => write!(f, "no se pudo serializar TOML: {e}"),
             Self::TomlParse(e) => write!(f, "TOML inválido: {e}"),
-            Self::InvalidName => write!(f, "el nombre no puede estar vacío ni contener solo espacios"),
+            Self::InvalidName => write!(
+                f,
+                "el nombre no puede estar vacío ni contener solo espacios"
+            ),
             Self::NotFound(id) => write!(f, "no existe el recurso {id}"),
-            Self::InvalidFileName(path) => write!(f, "nombre de archivo de recurso inválido: {}", path.display()),
-            Self::IdMismatch { expected, found } => write!(f, "el ID del archivo ({expected}) no coincide con el ID del contenido ({found})"),
-            Self::IdNotFirstLine(path) => write!(f, "el ID no aparece en la primera línea de {}", path.display()),
+            Self::InvalidFileName(path) => write!(
+                f,
+                "nombre de archivo de recurso inválido: {}",
+                path.display()
+            ),
+            Self::IdMismatch { expected, found } => write!(
+                f,
+                "el ID del archivo ({expected}) no coincide con el ID del contenido ({found})"
+            ),
+            Self::IdNotFirstLine(path) => write!(
+                f,
+                "el ID no aparece en la primera línea de {}",
+                path.display()
+            ),
         }
     }
 }
@@ -62,13 +76,19 @@ impl std::fmt::Display for StoreError {
 impl std::error::Error for StoreError {}
 
 impl From<io::Error> for StoreError {
-    fn from(value: io::Error) -> Self { Self::Io(value) }
+    fn from(value: io::Error) -> Self {
+        Self::Io(value)
+    }
 }
 impl From<toml::ser::Error> for StoreError {
-    fn from(value: toml::ser::Error) -> Self { Self::TomlSerialize(value) }
+    fn from(value: toml::ser::Error) -> Self {
+        Self::TomlSerialize(value)
+    }
 }
 impl From<toml::de::Error> for StoreError {
-    fn from(value: toml::de::Error) -> Self { Self::TomlParse(value) }
+    fn from(value: toml::de::Error) -> Self {
+        Self::TomlParse(value)
+    }
 }
 
 /// Almacén local de recursos. El prototipo presupone un solo proceso escritor.
@@ -83,14 +103,24 @@ impl ResourceStore {
         Ok(Self { root })
     }
 
-    pub fn root(&self) -> &Path { &self.root }
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
 
-    pub fn create(&self, name: &str, description: Option<&str>) -> Result<(Resource, Vec<ResourceWarning>), StoreError> {
+    pub fn create(
+        &self,
+        name: &str,
+        description: Option<&str>,
+    ) -> Result<(Resource, Vec<ResourceWarning>), StoreError> {
         let (name, _) = normalize_name(name)?;
         let mut warnings = Vec::new();
         let id = Uuid::now_v7();
         let description = normalize_description(description.map(str::to_owned));
-        let resource = Resource { id, name, description };
+        let resource = Resource {
+            id,
+            name,
+            description,
+        };
         self.write_new(&resource)?;
         if resource.name.starts_with(' ') {
             warnings.push(ResourceWarning::LeadingSpaces { id });
@@ -100,11 +130,17 @@ impl ResourceStore {
 
     pub fn get(&self, id: Uuid) -> Result<Resource, StoreError> {
         let path = self.path_for(id);
-        if !path.is_file() { return Err(StoreError::NotFound(id)); }
+        if !path.is_file() {
+            return Err(StoreError::NotFound(id));
+        }
         self.read_file(&path, id)
     }
 
-    pub fn update(&self, id: Uuid, patch: ResourcePatch) -> Result<(Resource, Vec<ResourceWarning>), StoreError> {
+    pub fn update(
+        &self,
+        id: Uuid,
+        patch: ResourcePatch,
+    ) -> Result<(Resource, Vec<ResourceWarning>), StoreError> {
         let mut resource = self.get(id)?;
         let mut warnings = Vec::new();
 
@@ -133,12 +169,16 @@ impl ResourceStore {
             let entry = match entry {
                 Ok(entry) => entry,
                 Err(error) => {
-                    warnings.push(format!("no se pudo leer una entrada del directorio: {error}"));
+                    warnings.push(format!(
+                        "no se pudo leer una entrada del directorio: {error}"
+                    ));
                     continue;
                 }
             };
             let path = entry.path();
-            if path.extension().and_then(|ext| ext.to_str()) != Some("toml") { continue; }
+            if path.extension().and_then(|ext| ext.to_str()) != Some("toml") {
+                continue;
+            }
 
             let stem = match path.file_stem().and_then(|s| s.to_str()) {
                 Some(stem) => stem,
@@ -150,7 +190,10 @@ impl ResourceStore {
             let expected_id = match Uuid::parse_str(stem) {
                 Ok(id) => id,
                 Err(_) => {
-                    warnings.push(format!("nombre de archivo no contiene un UUID válido: {}", path.display()));
+                    warnings.push(format!(
+                        "nombre de archivo no contiene un UUID válido: {}",
+                        path.display()
+                    ));
                     continue;
                 }
             };
@@ -175,7 +218,8 @@ impl ResourceStore {
         let mut temp = tempfile::NamedTempFile::new_in(&self.root)?;
         temp.write_all(content.as_bytes())?;
         temp.as_file().sync_all()?;
-        temp.persist_noclobber(path).map_err(|error| StoreError::Io(error.error))?;
+        temp.persist_noclobber(path)
+            .map_err(|error| StoreError::Io(error.error))?;
         Ok(())
     }
 
@@ -185,7 +229,8 @@ impl ResourceStore {
         let mut temp = tempfile::NamedTempFile::new_in(&self.root)?;
         temp.write_all(content.as_bytes())?;
         temp.as_file().sync_all()?;
-        temp.persist(path).map_err(|error| StoreError::Io(error.error))?;
+        temp.persist(path)
+            .map_err(|error| StoreError::Io(error.error))?;
         Ok(())
     }
 
@@ -197,7 +242,10 @@ impl ResourceStore {
         }
         let resource: Resource = toml::from_str(&content)?;
         if resource.id != expected_id {
-            return Err(StoreError::IdMismatch { expected: expected_id, found: resource.id });
+            return Err(StoreError::IdMismatch {
+                expected: expected_id,
+                found: resource.id,
+            });
         }
         validate_stored_name(&resource.name)?;
         Ok(resource)
@@ -206,7 +254,9 @@ impl ResourceStore {
 
 fn normalize_name(name: &str) -> Result<(String, Vec<ResourceWarning>), StoreError> {
     let normalized = name.trim_end_matches(' ').to_owned();
-    if normalized.is_empty() { return Err(StoreError::InvalidName); }
+    if normalized.is_empty() {
+        return Err(StoreError::InvalidName);
+    }
     // Los espacios iniciales se conservan por ahora; el llamador emite el aviso.
     Ok((normalized, Vec::new()))
 }
@@ -265,10 +315,15 @@ mod tests {
     fn patch_preserves_omitted_fields_and_identity() {
         let (_dir, store) = store();
         let (created, _) = store.create("Antes", Some("Descripción")).unwrap();
-        let (updated, _) = store.update(created.id, ResourcePatch {
-            name: Some("Después  ".to_owned()),
-            description: None,
-        }).unwrap();
+        let (updated, _) = store
+            .update(
+                created.id,
+                ResourcePatch {
+                    name: Some("Después  ".to_owned()),
+                    description: None,
+                },
+            )
+            .unwrap();
         assert_eq!(updated.id, created.id);
         assert_eq!(updated.name, "Después");
         assert_eq!(updated.description.as_deref(), Some("Descripción"));
@@ -277,10 +332,16 @@ mod tests {
     #[test]
     fn rejects_blank_names_and_warns_about_leading_space() {
         let (_dir, store) = store();
-        assert!(matches!(store.create("   ", None), Err(StoreError::InvalidName)));
+        assert!(matches!(
+            store.create("   ", None),
+            Err(StoreError::InvalidName)
+        ));
         let (resource, warnings) = store.create(" nombre", None).unwrap();
         assert_eq!(resource.name, " nombre");
-        assert_eq!(warnings, vec![ResourceWarning::LeadingSpaces { id: resource.id }]);
+        assert_eq!(
+            warnings,
+            vec![ResourceWarning::LeadingSpaces { id: resource.id }]
+        );
     }
 
     #[test]
@@ -317,10 +378,15 @@ mod tests {
     fn empty_description_clears_it() {
         let (_dir, store) = store();
         let (resource, _) = store.create("Recurso", Some("Texto")).unwrap();
-        let (updated, _) = store.update(resource.id, ResourcePatch {
-            name: None,
-            description: Some(Some(String::new())),
-        }).unwrap();
+        let (updated, _) = store
+            .update(
+                resource.id,
+                ResourcePatch {
+                    name: None,
+                    description: Some(Some(String::new())),
+                },
+            )
+            .unwrap();
         assert_eq!(updated.description, None);
     }
 }
