@@ -11,7 +11,8 @@ Núcleo inicial para crear, guardar, recuperar y modificar recursos locales.
 ```sh
 cargo test
 ```
+## Estado de esta revisión
 
-## Estado actual
+El protocolo de persistencia utiliza temporales ".<UUID>.toml.tmp", evita sobrescribir temporales abandonados, advierte de su presencia durante la recuperación y evita escrituras cuando el contenido serializado no cambia. También se prueba que un fallo de promoción conserva el temporal validado.
 
-Los archivos de código y las pruebas están preparados, pero todavía no se han compilado en el entorno donde fueron generados porque Rust/Cargo no están disponibles allí. Ejecuta `cargo test` y comparte toda la salida si aparece algún error; corregiremos el código sobre esta misma versión.
+**Verificación local:** `cargo test --locked` terminó con 13 pruebas aprobadas y 0 fallidas en Termux. `cargo fmt --check` y `git diff --check` terminaron sin errores. La revisión final del diff de implementación se ha realizado.
