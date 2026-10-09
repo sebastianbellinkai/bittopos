@@ -27,7 +27,7 @@ El archivo se llama `<UUID>.toml`. La primera línea debe contener el campo `id`
 
 Se procesan los archivos con extensión `.toml` cuyo nombre base sea un UUID válido. Un archivo ilegible, con TOML inválido, nombre de archivo inválido, ID ausente de la primera línea, ID discordante o nombre inválido se omite y genera una advertencia. Los demás archivos siguen recuperándose.
 
-Los temporales de guardado siguen el patrón `.<UUID>.toml.tmp`. La recuperación los identifica y advierte de su presencia, pero nunca los promueve automáticamente a definitivos ni altera el recurso confirmado. Otros archivos que no sean recursos confirmados se ignoran.
+Los temporales de guardado utilizan el patrón ".<UUID>.toml.tmp". Durante la recuperación, los archivos cuyo nombre comienza por punto y termina en ".toml.tmp" se identifican como posibles temporales abandonados y generan una advertencia. Nunca se promueven automáticamente a definitivos ni alteran el recurso confirmado. Otros archivos que no correspondan a recursos definitivos ni a posibles temporales de guardado se ignoran.
 
 ## Escritura
 
