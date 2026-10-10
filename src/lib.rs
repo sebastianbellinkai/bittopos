@@ -6,5 +6,5 @@
 mod resource;
 mod store;
 
-pub use resource::{Resource, ResourcePatch, ResourceWarning};
+pub use resource::{Info, Resource, ResourcePatch, ResourceWarning};
 pub use store::{ResourceStore, StoreError};

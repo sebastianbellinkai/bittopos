@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 use crate::resource::{
-    normalize_description, normalize_name, validate_stored_name, Resource, ResourcePatch,
+    normalize_description, normalize_name, validate_stored_name, Info, Resource, ResourcePatch,
     ResourceWarning,
 };
 
@@ -105,11 +105,14 @@ impl ResourceStore {
         let description = normalize_description(description.map(str::to_owned));
         let resource = Resource {
             id,
-            name,
-            description,
+            info: Info {
+                title: name,
+                description,
+                tags: Vec::new(),
+            },
         };
         self.write_new(&resource)?;
-        if resource.name.starts_with(' ') {
+        if resource.info.title.starts_with(' ') {
             warnings.push(ResourceWarning::LeadingSpaces { id });
         }
         Ok((resource, warnings))
@@ -131,15 +134,20 @@ impl ResourceStore {
         let mut resource = self.get(id)?;
         let mut warnings = Vec::new();
 
-        if let Some(name) = patch.name {
-            let (normalized, _) = normalize_name(&name)?;
+        if let Some(title) = patch.title {
+            let (normalized, _) = normalize_name(&title)?;
             if normalized.starts_with(' ') {
                 warnings.push(ResourceWarning::LeadingSpaces { id });
             }
-            resource.name = normalized;
+            resource.info.title = normalized;
         }
+
         if let Some(description) = patch.description {
-            resource.description = normalize_description(description);
+            resource.info.description = normalize_description(description);
+        }
+
+        if let Some(tags) = patch.tags {
+            resource.info.tags = tags;
         }
 
         self.write_existing(&resource)?;
@@ -289,7 +297,7 @@ impl ResourceStore {
                 found: resource.id,
             });
         }
-        validate_stored_name(&resource.name)?;
+        validate_stored_name(&resource.info.title)?;
         Ok(resource)
     }
 }
@@ -330,7 +338,7 @@ mod tests {
         assert!(warnings.is_empty());
         let file = fs::read_to_string(store.path_for(resource.id)).unwrap();
         assert!(file.lines().next().unwrap().starts_with("id = "));
-        assert!(file.contains("name = \"Primer recurso\""));
+        assert!(file.contains("title = \"Primer recurso\""));
     }
 
     #[test]
@@ -358,14 +366,15 @@ mod tests {
             .update(
                 created.id,
                 ResourcePatch {
-                    name: Some("Después  ".to_owned()),
+                    title: Some("Después  ".to_owned()),
                     description: None,
+                    tags: None,
                 },
             )
             .unwrap();
         assert_eq!(updated.id, created.id);
-        assert_eq!(updated.name, "Después");
-        assert_eq!(updated.description.as_deref(), Some("Descripción"));
+        assert_eq!(updated.info.title, "Después");
+        assert_eq!(updated.info.description.as_deref(), Some("Descripción"));
     }
 
     #[test]
@@ -376,7 +385,7 @@ mod tests {
             Err(StoreError::InvalidName)
         ));
         let (resource, warnings) = store.create(" nombre", None).unwrap();
-        assert_eq!(resource.name, " nombre");
+        assert_eq!(resource.info.title, " nombre");
         assert_eq!(
             warnings,
             vec![ResourceWarning::LeadingSpaces { id: resource.id }]
@@ -421,12 +430,13 @@ mod tests {
             .update(
                 resource.id,
                 ResourcePatch {
-                    name: None,
+                    title: None,
                     description: Some(Some(String::new())),
+                    tags: None,
                 },
             )
             .unwrap();
-        assert_eq!(updated.description, None);
+        assert_eq!(updated.info.description, None);
     }
     #[test]
     fn update_does_not_overwrite_abandoned_temporary() {
@@ -440,8 +450,9 @@ mod tests {
         let result = store.update(
             resource.id,
             ResourcePatch {
-                name: Some("Cambio".to_owned()),
+                title: Some("Cambio".to_owned()),
                 description: None,
+                tags: None,
             },
         );
 
@@ -459,8 +470,11 @@ mod tests {
         let id = Uuid::now_v7();
         let resource = Resource {
             id,
-            name: "Temporal preparado".to_owned(),
-            description: None,
+            info: Info {
+                title: "Temporal preparado".to_owned(),
+                description: None,
+                tags: Vec::new(),
+            },
         };
         let temporary_path = store.temporary_path_for(id);
         let destination_path = store.path_for(id);
