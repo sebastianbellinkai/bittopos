@@ -92,53 +92,42 @@ pub fn relation_endpoints(resource: &Resource) -> Result<RelationEndpoints, Rela
         .iter()
         .find(|segment| segment.key == RELATION_SEGMENT && segment.role == SegmentRole::Control)
         .ok_or_else(|| RelationError::Invalid("el recurso no es una relación".to_owned()))?;
-    let kind = component_string(segment, "kind")?;
-    let source = component_string(segment, "source")?;
-    let target = component_string(segment, "target")?;
+    let from = component_string(segment, "from")?;
+    let to = component_string(segment, "to")?;
     let parse_id = |value: &str| {
         Uuid::parse_str(value)
             .map_err(|_| RelationError::Invalid(format!("UUID de extremo inválido: {value}")))
     };
 
-    match kind.as_str() {
-        "resource_resource" => {
-            ensure_component_kind(segment, "source", "resource-id")?;
-            ensure_component_kind(segment, "target", "resource-id")?;
-            Ok(RelationEndpoints::Resources {
-                source: parse_id(&source)?,
-                target: parse_id(&target)?,
-            })
-        }
-        "instance_instance" => {
-            ensure_component_kind(segment, "source", "instance-id")?;
-            ensure_component_kind(segment, "target", "instance-id")?;
-            Ok(RelationEndpoints::Instances {
-                source: parse_id(&source)?,
-                target: parse_id(&target)?,
-            })
-        }
+    let from_kind = component_kind(segment, "from")?;
+    let to_kind = component_kind(segment, "to")?;
+    if from_kind != to_kind {
+        return Err(RelationError::Invalid(
+            "los componentes from y to deben pertenecer al mismo espacio de identidad".to_owned(),
+        ));
+    }
+    match from_kind.as_str() {
+        "resource-id" => Ok(RelationEndpoints::Resources {
+            source: parse_id(&from)?,
+            target: parse_id(&to)?,
+        }),
+        "instance-id" => Ok(RelationEndpoints::Instances {
+            source: parse_id(&from)?,
+            target: parse_id(&to)?,
+        }),
         _ => Err(RelationError::Invalid(format!(
-            "tipo de extremos desconocido: {kind}"
+            "tipo de extremo desconocido: {from_kind}"
         ))),
     }
 }
 
-fn ensure_component_kind(
-    segment: &SemanticSegment,
-    key: &str,
-    expected: &str,
-) -> Result<(), RelationError> {
-    let component = segment
+fn component_kind(segment: &SemanticSegment, key: &str) -> Result<String, RelationError> {
+    segment
         .components
         .iter()
         .find(|item| item.key == key)
-        .ok_or_else(|| RelationError::Invalid(format!("falta el componente reservado '{key}'")))?;
-    if component.kind != expected {
-        return Err(RelationError::Invalid(format!(
-            "el extremo '{key}' debe ser de tipo '{expected}'"
-        )));
-    }
-    Ok(())
+        .map(|component| component.kind.clone())
+        .ok_or_else(|| RelationError::Invalid(format!("falta el componente reservado '{key}'")))
 }
 
 fn component_string(segment: &SemanticSegment, key: &str) -> Result<String, RelationError> {
@@ -155,21 +144,9 @@ fn component_string(segment: &SemanticSegment, key: &str) -> Result<String, Rela
 }
 
 fn relation_segment(endpoints: RelationEndpoints) -> SemanticSegment {
-    let (kind, source_kind, target_kind, source, target) = match endpoints {
-        RelationEndpoints::Resources { source, target } => (
-            "resource_resource",
-            "resource-id",
-            "resource-id",
-            source,
-            target,
-        ),
-        RelationEndpoints::Instances { source, target } => (
-            "instance_instance",
-            "instance-id",
-            "instance-id",
-            source,
-            target,
-        ),
+    let (endpoint_kind, from, to) = match endpoints {
+        RelationEndpoints::Resources { source, target } => ("resource-id", source, target),
+        RelationEndpoints::Instances { source, target } => ("instance-id", source, target),
     };
 
     SemanticSegment {
@@ -178,19 +155,14 @@ fn relation_segment(endpoints: RelationEndpoints) -> SemanticSegment {
         concepts: Vec::new(),
         components: vec![
             crate::Component {
-                key: "kind".to_owned(),
-                kind: "relation-kind".to_owned(),
-                value: serde_json::Value::String(kind.to_owned()),
+                key: "from".to_owned(),
+                kind: endpoint_kind.to_owned(),
+                value: serde_json::Value::String(from.to_string()),
             },
             crate::Component {
-                key: "source".to_owned(),
-                kind: source_kind.to_owned(),
-                value: serde_json::Value::String(source.to_string()),
-            },
-            crate::Component {
-                key: "target".to_owned(),
-                kind: target_kind.to_owned(),
-                value: serde_json::Value::String(target.to_string()),
+                key: "to".to_owned(),
+                kind: endpoint_kind.to_owned(),
+                value: serde_json::Value::String(to.to_string()),
             },
         ],
     }
@@ -225,6 +197,17 @@ mod tests {
 
         assert!(is_relation(&stored));
         assert_eq!(stored.info.title, "Relacionado con");
+        let control = stored
+            .segments
+            .iter()
+            .find(|segment| segment.key == "__relation")
+            .unwrap();
+        let keys: Vec<_> = control
+            .components
+            .iter()
+            .map(|component| component.key.as_str())
+            .collect();
+        assert_eq!(keys, vec!["from", "to"]);
         assert_eq!(
             relation_endpoints(&stored).unwrap(),
             RelationEndpoints::Resources {

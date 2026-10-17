@@ -11,7 +11,7 @@ operaciones del núcleo
    └── resolución semántica
 ```
 
-La estructura es el único contenedor de organización de las instancias. Los recursos y relaciones son archivos independientes; las relaciones se leen directamente sin instanciación. La resolución combina la definición compartida con las diferencias locales de la instancia.
+La estructura es el único contenedor de organización de las instancias. Los recursos y relaciones son archivos independientes; las relaciones se leen directamente sin instanciación. El segmento de control `__relation` contiene únicamente los componentes `from` y `to`. El espacio de identidad de ambos extremos se expresa mediante el tipo de componente (`resource-id` o `instance-id`), sin un componente adicional `kind`. La resolución combina la definición compartida con las diferencias locales de la instancia.
 
 ## Módulos
 
