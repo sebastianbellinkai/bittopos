@@ -16,6 +16,8 @@ pub struct Content {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Semantic {
     pub allocation: Vec<Uuid>,
+    /// Identidades de recursos de referencia asociados a esta instancia.
+    pub references: Vec<Uuid>,
 }
 
 /// Referencia protegida al recurso del que procede una instancia.
@@ -155,11 +157,9 @@ impl Instance {
         {
             self.content = None;
         }
-        if self
-            .semantic
-            .as_ref()
-            .is_some_and(|semantic| semantic.allocation.is_empty())
-        {
+        if self.semantic.as_ref().is_some_and(|semantic| {
+            semantic.allocation.is_empty() && semantic.references.is_empty()
+        }) {
             self.semantic = None;
         }
     }
@@ -418,6 +418,7 @@ mod tests {
         });
         root.semantic = Some(Semantic {
             allocation: vec![Uuid::now_v7()],
+            references: Vec::new(),
         });
 
         let workspace = Workspace {
@@ -444,6 +445,7 @@ mod tests {
         });
         child.semantic = Some(Semantic {
             allocation: vec![leaf_id],
+            references: Vec::new(),
         });
 
         let mut root = Instance::new(Uuid::now_v7(), resource_id);
@@ -452,6 +454,7 @@ mod tests {
         });
         root.semantic = Some(Semantic {
             allocation: vec![child_id],
+            references: Vec::new(),
         });
 
         let mut workspace = Workspace {
@@ -486,6 +489,7 @@ mod tests {
         });
         root.semantic = Some(Semantic {
             allocation: vec![child_id],
+            references: Vec::new(),
         });
 
         let mut workspace = Workspace {

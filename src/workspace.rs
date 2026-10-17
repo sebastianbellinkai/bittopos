@@ -20,6 +20,8 @@ struct PersistedContent {
 struct PersistedSemantic {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     allocation: Vec<Uuid>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    references: Vec<Uuid>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,6 +63,7 @@ impl From<&Instance> for PersistedInstance {
                 .as_ref()
                 .map(|semantic| PersistedSemantic {
                     allocation: semantic.allocation.clone(),
+                    references: semantic.references.clone(),
                 }),
             content: instance.content.as_ref().map(|content| PersistedContent {
                 instances: content
@@ -102,6 +105,7 @@ impl TryFrom<PersistedInstance> for Instance {
             },
             semantic: persisted.semantic.map(|semantic| Semantic {
                 allocation: semantic.allocation,
+                references: semantic.references,
             }),
             content,
             masks: persisted.masks,
@@ -320,6 +324,7 @@ mod tests {
         });
         root.semantic = Some(Semantic {
             allocation: vec![child_id],
+            references: Vec::new(),
         });
 
         let workspace = Workspace {

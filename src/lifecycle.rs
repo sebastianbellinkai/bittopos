@@ -8,7 +8,8 @@ use std::fmt;
 use uuid::Uuid;
 
 use crate::{
-    is_relation, Instance, ResourceStore, StoreError, Workspace, WorkspaceError, WorkspaceStore,
+    is_reference, is_relation, Instance, ResourceStore, StoreError, Workspace, WorkspaceError,
+    WorkspaceStore,
 };
 
 #[derive(Debug)]
@@ -18,6 +19,7 @@ pub enum LifecycleError {
     ParentRequired,
     InstanceNotFound(Uuid),
     RelationCannotBeInstantiated(Uuid),
+    ReferenceCannotBeInstantiated(Uuid),
 }
 
 impl fmt::Display for LifecycleError {
@@ -30,6 +32,10 @@ impl fmt::Display for LifecycleError {
             Self::RelationCannotBeInstantiated(id) => write!(
                 f,
                 "la relación {id} se lee directamente y no puede instanciarse"
+            ),
+            Self::ReferenceCannotBeInstantiated(id) => write!(
+                f,
+                "la referencia {id} se lee directamente y no puede instanciarse"
             ),
         }
     }
@@ -74,6 +80,9 @@ pub fn load_workspace(
         if is_relation(&resource) {
             return Err(LifecycleError::RelationCannotBeInstantiated(resource.id));
         }
+        if is_reference(&resource) {
+            return Err(LifecycleError::ReferenceCannotBeInstantiated(resource.id));
+        }
     }
     Ok(workspace)
 }
@@ -99,6 +108,9 @@ pub fn create_instance_under(
     let resource = resources.get(resource_id)?;
     if is_relation(&resource) {
         return Err(LifecycleError::RelationCannotBeInstantiated(resource_id));
+    }
+    if is_reference(&resource) {
+        return Err(LifecycleError::ReferenceCannotBeInstantiated(resource_id));
     }
     let mut workspace = load_workspace(resources, workspaces, workspace_name)?;
 

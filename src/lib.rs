@@ -31,7 +31,10 @@ pub use navigation::{NavigationError, NavigationState, NavigationStore};
 pub use relations::{
     create_relation, is_relation, relation_endpoints, RelationEndpoints, RelationError,
 };
-pub use resource::{Info, Resource, ResourcePatch, ResourceWarning};
+pub use resource::{
+    create_reference, is_reference, reference_target, Info, ReferenceError, Resource,
+    ResourcePatch, ResourceWarning,
+};
 pub use semantic_masks::{
     resolve as resolve_semantics, Component, ComponentMerge, Concept, ElementAddress,
     InstanceSemantics, Mask, MaskError, MaskMode, ReplaceComponent, ResourceDefinition,

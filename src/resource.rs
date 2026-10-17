@@ -1,5 +1,7 @@
-use crate::semantic_masks::{Segment, SegmentRole};
+use crate::semantic_masks::{Component, Segment, SegmentRole};
+use crate::{load_workspace, LifecycleError, ResourceStore, StoreError, WorkspaceStore};
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -140,5 +142,164 @@ mod tests {
             ResourceError::InvalidName
         );
         assert!(normalize_name("valid name").is_ok());
+    }
+}
+
+const REFERENCE_SEGMENT: &str = "__reference";
+
+/// Errores al crear o interpretar recursos de referencia.
+#[derive(Debug)]
+pub enum ReferenceError {
+    Resource(StoreError),
+    Invalid(String),
+}
+
+impl fmt::Display for ReferenceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Resource(error) => write!(f, "error de recurso: {error}"),
+            Self::Invalid(message) => write!(f, "referencia inválida: {message}"),
+        }
+    }
+}
+
+impl std::error::Error for ReferenceError {}
+
+impl From<StoreError> for ReferenceError {
+    fn from(value: StoreError) -> Self {
+        Self::Resource(value)
+    }
+}
+
+/// Crea una referencia no instanciable desde una instancia propietaria hacia otra.
+/// La identidad del recurso de referencia se registra en semantic.references del propietario.
+pub fn create_reference(
+    resources: &ResourceStore,
+    workspaces: &WorkspaceStore,
+    workspace_name: &str,
+    owner_instance_id: Uuid,
+    target_instance_id: Uuid,
+    title: &str,
+    description: Option<&str>,
+) -> Result<Resource, ReferenceError> {
+    let mut workspace = load_workspace(resources, workspaces, workspace_name)
+        .map_err(|error: LifecycleError| ReferenceError::Invalid(error.to_string()))?;
+    if workspace.find_instance(owner_instance_id).is_none() {
+        return Err(ReferenceError::Invalid(format!(
+            "no existe la instancia propietaria {owner_instance_id}"
+        )));
+    }
+    if workspace.find_instance(target_instance_id).is_none() {
+        return Err(ReferenceError::Invalid(format!(
+            "no existe la instancia destino {target_instance_id}"
+        )));
+    }
+
+    let (resource, _) = resources.create(title, description)?;
+    let reference = resources.update_segments(
+        resource.id,
+        vec![Segment {
+            key: REFERENCE_SEGMENT.to_owned(),
+            role: SegmentRole::Control,
+            concepts: Vec::new(),
+            components: vec![Component {
+                key: "point".to_owned(),
+                kind: "instance-id".to_owned(),
+                value: serde_json::Value::String(target_instance_id.to_string()),
+            }],
+        }],
+    )?;
+
+    let owner = workspace
+        .find_instance_mut(owner_instance_id)
+        .expect("owner was validated above");
+    let semantic = owner.semantic.get_or_insert_with(Default::default);
+    semantic.references.push(reference.id);
+    workspaces
+        .save(workspace_name, &workspace)
+        .map_err(|error| ReferenceError::Invalid(error.to_string()))?;
+
+    Ok(reference)
+}
+
+/// Detecta un recurso de referencia por su segmento de control reservado.
+pub fn is_reference(resource: &Resource) -> bool {
+    resource
+        .segments
+        .iter()
+        .any(|segment| segment.key == REFERENCE_SEGMENT && segment.role == SegmentRole::Control)
+}
+
+/// Lee el UUID de la instancia apuntada por una referencia.
+pub fn reference_target(resource: &Resource) -> Result<Uuid, ReferenceError> {
+    let segment = resource
+        .segments
+        .iter()
+        .find(|segment| segment.key == REFERENCE_SEGMENT && segment.role == SegmentRole::Control)
+        .ok_or_else(|| ReferenceError::Invalid("el recurso no es una referencia".to_owned()))?;
+    let point = segment
+        .components
+        .iter()
+        .find(|component| component.key == "point")
+        .ok_or_else(|| {
+            ReferenceError::Invalid("falta el componente reservado 'point'".to_owned())
+        })?;
+    if point.kind != "instance-id" {
+        return Err(ReferenceError::Invalid(
+            "el componente 'point' debe ser de tipo 'instance-id'".to_owned(),
+        ));
+    }
+    let value = point.value.as_str().ok_or_else(|| {
+        ReferenceError::Invalid("el componente 'point' debe ser texto".to_owned())
+    })?;
+    Uuid::parse_str(value)
+        .map_err(|_| ReferenceError::Invalid(format!("UUID de instancia inválido: {value}")))
+}
+
+#[cfg(test)]
+mod reference_tests {
+    use super::*;
+    use crate::{create_instance, ResourceStore, WorkspaceStore};
+
+    #[test]
+    fn reference_points_to_an_instance_and_is_registered_without_instantiation() {
+        let directory = tempfile::tempdir().unwrap();
+        let resources = ResourceStore::new(directory.path().join("resources")).unwrap();
+        let workspaces = WorkspaceStore::new(directory.path().join("workspaces")).unwrap();
+        let (owner_resource, _) = resources.create("Propietario", None).unwrap();
+        let (target_resource, _) = resources.create("Destino", None).unwrap();
+        let owner =
+            create_instance(&resources, &workspaces, "principal", owner_resource.id).unwrap();
+        let target =
+            create_instance(&resources, &workspaces, "principal", target_resource.id).unwrap();
+
+        let reference = create_reference(
+            &resources,
+            &workspaces,
+            "principal",
+            owner,
+            target,
+            "Apunta a destino",
+            None,
+        )
+        .unwrap();
+
+        assert!(is_reference(&reference));
+        assert_eq!(reference_target(&reference).unwrap(), target);
+        let workspace = workspaces.load("principal").unwrap();
+        assert_eq!(
+            workspace
+                .find_instance(owner)
+                .unwrap()
+                .semantic
+                .as_ref()
+                .unwrap()
+                .references,
+            vec![reference.id]
+        );
+        assert!(matches!(
+            crate::create_instance(&resources, &workspaces, "principal", reference.id),
+            Err(crate::LifecycleError::ReferenceCannotBeInstantiated(id)) if id == reference.id
+        ));
     }
 }

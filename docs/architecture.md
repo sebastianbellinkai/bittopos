@@ -11,11 +11,11 @@ operaciones del núcleo
    └── resolución semántica
 ```
 
-La estructura es el único contenedor de organización de las instancias. Los recursos y relaciones son archivos independientes; las relaciones se leen directamente sin instanciación. La resolución combina la definición compartida con las diferencias locales de la instancia.
+La estructura es el único contenedor de organización de las instancias. Los recursos, relaciones y referencias son archivos TOML independientes; las relaciones y referencias se leen directamente sin instanciación. Una referencia contiene el componente de apuntado `point` hacia una instancia y su ID se registra en `semantic.references` de la instancia propietaria. La semántica de una instancia no crea componentes de relaciones o referencias por defecto: ambos son opcionales y explícitos. `allocation` sigue siendo el componente de contención; `references` solo aparece cuando se asocia una referencia. La resolución combina la definición compartida con las diferencias locales de la instancia.
 
 ## Módulos
 
-- `resource.rs`: modelo de recurso y metadatos.
+- `resource.rs`: modelo de recurso, metadatos y referencias directas a instancias, identificadas por `__reference.point`.
 - `relations.rs`: creación, lectura y validación de extremos de relaciones.
 - `store.rs`: lectura y escritura de recursos TOML.
 - `workspace_model.rs`: instancias, contención y reglas del modelo de estructura.
